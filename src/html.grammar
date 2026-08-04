@@ -4,6 +4,7 @@
 
 entity[@isGroup=Entity] {
   Text |
+  Interpolation |
   EntityReference |
   CharacterReference |
   InvalidEntity |
@@ -88,6 +89,8 @@ AttributeValue[isolate] {
 
 Comment[isolate] { commentStart commentContent* commentEnd }
 
+Interpolation[isolate] { "{{" InterpolationContent? "}}" }
+
 @context elementContext from "./tokens.js"
 
 @external tokens scriptTokens from "./tokens.js" {
@@ -161,7 +164,11 @@ Comment[isolate] { commentStart commentContent* commentEnd }
 
   @precedence { CharacterReference, EntityReference, InvalidEntity }
 
-  Text[group=TextContent] { ![<&]+ }
+  Text[group=TextContent] { (![<&{] | "{" ![<&{])+ | "{" }
+
+  InterpolationContent { (![}] | "}" ![}])+ }
+
+  @precedence { "{{", Text }
 
   commentStart { "<!--" }
   commentEnd { "-->" }

@@ -1,0 +1,50 @@
+# Parses Vue text interpolation
+
+<span>Message: {{ msg }}</span>
+
+==>
+
+Document(
+  Element(
+    OpenTag(StartTag, TagName, EndTag),
+    Text,
+    Interpolation(InterpolationContent),
+    CloseTag(StartCloseTag, TagName, EndTag)))
+
+# Parses multiple Vue text interpolations
+
+<div>{{ a }} + {{ b }}</div>
+
+==>
+
+Document(
+  Element(
+    OpenTag(StartTag, TagName, EndTag),
+    Interpolation(InterpolationContent),
+    Text,
+    Interpolation(InterpolationContent),
+    CloseTag(StartCloseTag, TagName, EndTag)))
+
+# Parses Vue text interpolation containing braces and operators
+
+<span>{{ a && {nested: true} }}</span>
+
+==>
+
+Document(
+  Element(
+    OpenTag(StartTag, TagName, EndTag),
+    Interpolation(InterpolationContent),
+    CloseTag(StartCloseTag, TagName, EndTag)))
+
+# Treats lone curly braces as text
+
+<p>one { two } three</p>
+
+==>
+
+Document(
+  Element(
+    OpenTag(StartTag, TagName, EndTag),
+    Text,
+    CloseTag(StartCloseTag, TagName, EndTag)))
