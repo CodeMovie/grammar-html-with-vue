@@ -17,11 +17,19 @@ let mixed = parser.configure({
   }])
 })
 
+let codemovie = parser.configure({
+  dialect: "vue"
+})
+
 for (let file of fs.readdirSync(caseDir)) {
   if (!/\.txt$/.test(file)) continue
   let name = /^[^\.]*/.exec(file)[0]
   describe(name, () => {
-    let p = name == "mixed" ? mixed : parser
+    let p = name == "mixed"
+      ? mixed
+      : name == "codemovie"
+        ? codemovie
+        : parser
     for (let {name, run} of fileTests(fs.readFileSync(path.join(caseDir, file), "utf8"), file))
       it(name, () => run(p))
   })

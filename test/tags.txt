@@ -6,6 +6,14 @@
 
 Document(Element(OpenTag(StartTag,TagName,EndTag),Text,CloseTag(StartCloseTag,TagName,EndTag)))
 
+# Regular tag with what looks like interpolation syntax
+
+<foo>bar {{ bar }}</foo>
+
+==>
+
+Document(Element(OpenTag(StartTag,TagName,EndTag),Text,Text,Text,CloseTag(StartCloseTag,TagName,EndTag)))
+
 # Nested tag
 
 <a><b>c</b><br></a>

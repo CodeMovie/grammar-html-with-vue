@@ -8,7 +8,7 @@ Document(
   Element(
     OpenTag(StartTag, TagName, EndTag),
     Text,
-    Interpolation(InterpolationContent),
+    Interpolation(InterpolationStart,InterpolationContent,InterpolationEnd),
     CloseTag(StartCloseTag, TagName, EndTag)))
 
 # Parses multiple Vue text interpolations
@@ -20,9 +20,9 @@ Document(
 Document(
   Element(
     OpenTag(StartTag, TagName, EndTag),
-    Interpolation(InterpolationContent),
+    Interpolation(InterpolationStart,InterpolationContent,InterpolationEnd)
     Text,
-    Interpolation(InterpolationContent),
+    Interpolation(InterpolationStart,InterpolationContent,InterpolationEnd)
     CloseTag(StartCloseTag, TagName, EndTag)))
 
 # Parses Vue text interpolation containing braces and operators
@@ -34,7 +34,7 @@ Document(
 Document(
   Element(
     OpenTag(StartTag, TagName, EndTag),
-    Interpolation(InterpolationContent),
+    Interpolation(InterpolationStart,InterpolationContent,InterpolationEnd)
     CloseTag(StartCloseTag, TagName, EndTag)))
 
 # Treats lone curly braces as text

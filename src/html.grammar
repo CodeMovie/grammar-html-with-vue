@@ -1,6 +1,6 @@
 @top Document { (entity | DoctypeDecl)+ }
 
-@dialects { noMatch, selfClosing }
+@dialects { noMatch, selfClosing, vue }
 
 entity[@isGroup=Entity] {
   Text |
@@ -89,7 +89,7 @@ AttributeValue[isolate] {
 
 Comment[isolate] { commentStart commentContent* commentEnd }
 
-Interpolation[isolate] { "{{" InterpolationContent? "}}" }
+Interpolation[isolate] { InterpolationStart InterpolationContent? InterpolationEnd }
 
 @context elementContext from "./tokens.js"
 
@@ -166,9 +166,11 @@ Interpolation[isolate] { "{{" InterpolationContent? "}}" }
 
   Text[group=TextContent] { (![<&{] | "{" ![<&{])+ | "{" }
 
-  InterpolationContent { (![}] | "}" ![}])+ }
+  InterpolationStart[@dialect=vue] { "{{" }
+  InterpolationEnd[@dialect=vue] { "}}" }
+  InterpolationContent[@dialect=vue] { (![}] | "}" ![}])+ }
 
-  @precedence { "{{", Text }
+  @precedence { InterpolationStart, Text }
 
   commentStart { "<!--" }
   commentEnd { "-->" }
