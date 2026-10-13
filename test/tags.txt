@@ -12,7 +12,7 @@ Document(Element(OpenTag(StartTag,TagName,EndTag),Text,CloseTag(StartCloseTag,Ta
 
 ==>
 
-Document(Element(OpenTag(StartTag,TagName,EndTag),Text,Text,Text,CloseTag(StartCloseTag,TagName,EndTag)))
+Document(Element(OpenTag(StartTag,TagName,EndTag),Text,CloseTag(StartCloseTag,TagName,EndTag)))
 
 # Nested tag
 

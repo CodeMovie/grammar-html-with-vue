@@ -127,6 +127,13 @@ Interpolation[isolate] { InterpolationStart InterpolationContent? InterpolationE
   IncompleteCloseTag
 }
 
+@external tokens textTokens from "./tokens.js" {
+  Text[group=TextContent],
+  InterpolationStart[closedBy=InterpolationEnd],
+  InterpolationContent,
+  InterpolationEnd[openedBy=InterpolationStart]
+}
+
 @external tokens commentContent from "./tokens.js" {
   commentContent
 }
@@ -163,14 +170,6 @@ Interpolation[isolate] { InterpolationStart InterpolationContent? InterpolationE
   InvalidEntity { "&" }
 
   @precedence { CharacterReference, EntityReference, InvalidEntity }
-
-  Text[group=TextContent] { (![<&{] | "{" ![<&{])+ | "{" }
-
-  InterpolationStart[@dialect=vue] { "{{" }
-  InterpolationEnd[@dialect=vue] { "}}" }
-  InterpolationContent[@dialect=vue] { (![}] | "}" ![}])+ }
-
-  @precedence { InterpolationStart, Text }
 
   commentStart { "<!--" }
   commentEnd { "-->" }

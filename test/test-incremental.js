@@ -2,6 +2,7 @@ import {parser as baseParser} from "../dist/index.js"
 import {TreeFragment} from "@lezer/common"
 
 let parser = baseParser.configure({bufferLength: 2})
+let vueParser = baseParser.configure({bufferLength: 2, dialect: "vue"})
 
 let r = n => Math.floor(Math.random() * n)
 
@@ -38,7 +39,8 @@ function randomDoc(size) {
   return doc
 }
 
-function check(doc, [tp, pos, txt], prevAST) {
+function check(doc, [tp, pos, txt], prevAST, parser_ = parser) {
+  let parser = parser_
   let change = {fromA: pos, toA: pos, fromB: pos, toB: pos}, newDoc
   if (tp == "insert") {
     newDoc = doc.slice(0, pos) + txt + doc.slice(pos)
@@ -93,5 +95,17 @@ describe("Incremental parsing", () => {
 
   it("doesn't get confused by an invalid close tag receiving a matching open tag", () => {
     check("<div><p>foo</body>", ["insert", 0, "<body>"])
+  })
+
+  it("notices when an interpolation loses its closing braces", () => {
+    check("<p>a {{ b }} c</p>", ["del", 10], null, vueParser)
+  })
+
+  it("notices when an interpolation gains closing braces", () => {
+    check("<p>a {{ b } c</p>", ["insert", 10, "}"], null, vueParser)
+  })
+
+  it("notices when a string in an interpolation is closed", () => {
+    check("<p>{{ a + '}} b }}</p>", ["insert", 12, "'"], null, vueParser)
   })
 })

@@ -6,7 +6,8 @@ import {StartTag, StartCloseTag, NoMatchStartCloseTag, MismatchedStartCloseTag, 
         StartScriptTag, scriptText, StartCloseScriptTag,
         StartStyleTag, styleText, StartCloseStyleTag,
         StartTextareaTag, textareaText, StartCloseTextareaTag,
-        Dialect_noMatch, Dialect_selfClosing, EndTag, SelfClosingEndTag,
+        Dialect_noMatch, Dialect_selfClosing, Dialect_vue, EndTag, SelfClosingEndTag,
+        Text, InterpolationStart, InterpolationContent, InterpolationEnd,
         commentContent as cmntContent} from "./parser.terms.js"
 
 const selfClosers = {
@@ -197,3 +198,160 @@ export const scriptTokens = contentTokenizer("script", scriptText, StartCloseScr
 export const styleTokens = contentTokenizer("style", styleText, StartCloseStyleTag)
 
 export const textareaTokens = contentTokenizer("textarea", textareaText, StartCloseTextareaTag)
+
+const ampersand = 38, braceL = 123, braceR = 125, dollar = 36, backslash = 92,
+      quoteDouble = 34, quoteSingle = 39, backtick = 96, star = 42,
+      bracketL = 91, bracketR = 93, parenR = 41, newline = 10, carriageReturn = 13
+
+function isWordChar(ch) {
+  return ch >= 48 && ch <= 57 || ch >= 65 && ch <= 90 || ch >= 97 && ch <= 122 ||
+    ch == 95 || ch == dollar || ch >= 128
+}
+
+function isDigit(ch) {
+  return ch >= 48 && ch <= 57
+}
+
+// Words after which a slash starts a regular expression rather than
+// a division.
+const regexpKeywords = {
+  typeof: true, instanceof: true, in: true, of: true, new: true, delete: true,
+  void: true, await: true, yield: true, return: true, case: true, do: true, else: true
+}
+
+// Scan a JavaScript expression starting at `offset` (relative to the
+// input's position), looking for the `}}` that closes the
+// interpolation. Strings, template literals, comments, regular
+// expressions, and nested braces are skipped over, so that a `}}`
+// appearing inside of them does not end the interpolation. Returns
+// the offset of the closing braces, or -1 if there are none.
+function scanInterpolation(input, offset) {
+  // Stack of open braces. `true` marks a template literal `${`.
+  let braces = [], regexpAllowed = true
+  for (let pos = offset;;) {
+    let next = input.peek(pos)
+    if (next < 0) return -1
+    if (next == braceR) {
+      if (!braces.length) {
+        if (input.peek(pos + 1) == braceR) return pos
+        pos++
+      } else if (braces.pop()) {
+        pos = scanTemplate(input, pos + 1, braces)
+      } else {
+        pos++
+      }
+      regexpAllowed = false
+    } else if (next == braceL) {
+      braces.push(false)
+      pos++
+      regexpAllowed = true
+    } else if (next == quoteDouble || next == quoteSingle) {
+      pos = scanString(input, pos + 1, next)
+      regexpAllowed = false
+    } else if (next == backtick) {
+      pos = scanTemplate(input, pos + 1, braces)
+      regexpAllowed = false
+    } else if (next == slash && input.peek(pos + 1) == slash) {
+      // Line comment. Also ends before a closing `}}` so that
+      // `{{ a // note }}` works on a single line.
+      for (pos += 2;; pos++) {
+        let ch = input.peek(pos)
+        if (ch < 0 || ch == newline || ch == carriageReturn ||
+            !braces.length && ch == braceR && input.peek(pos + 1) == braceR) break
+      }
+    } else if (next == slash && input.peek(pos + 1) == star) {
+      for (pos += 2;; pos++) {
+        let ch = input.peek(pos)
+        if (ch < 0) return -1
+        if (ch == star && input.peek(pos + 1) == slash) { pos += 2; break }
+      }
+    } else if (next == slash && regexpAllowed) {
+      pos = scanRegexp(input, pos + 1)
+      regexpAllowed = false
+    } else if (isWordChar(next)) {
+      let word = ""
+      for (; isWordChar(input.peek(pos)); pos++) word += String.fromCharCode(input.peek(pos))
+      regexpAllowed = !isDigit(word.charCodeAt(0)) && regexpKeywords.hasOwnProperty(word)
+    } else {
+      if (!isSpace(next)) regexpAllowed = next != parenR && next != bracketR
+      pos++
+    }
+  }
+}
+
+function scanString(input, pos, quote) {
+  for (;; pos++) {
+    let ch = input.peek(pos)
+    if (ch < 0 || ch == newline || ch == carriageReturn) return pos
+    if (ch == quote) return pos + 1
+    if (ch == backslash) pos++
+  }
+}
+
+// Scan the rest of a template literal. When a `${` is found, a
+// marker is pushed onto the brace stack, and the position after it
+// is returned.
+function scanTemplate(input, pos, braces) {
+  for (;; pos++) {
+    let ch = input.peek(pos)
+    if (ch < 0) return pos
+    if (ch == backtick) return pos + 1
+    if (ch == backslash) pos++
+    else if (ch == dollar && input.peek(pos + 1) == braceL) {
+      braces.push(true)
+      return pos + 2
+    }
+  }
+}
+
+function scanRegexp(input, pos) {
+  for (let inClass = false;; pos++) {
+    let ch = input.peek(pos)
+    if (ch < 0 || ch == newline || ch == carriageReturn) return pos
+    if (ch == backslash) pos++
+    else if (ch == bracketL) inClass = true
+    else if (ch == bracketR) inClass = false
+    else if (ch == slash && !inClass) return pos + 1
+  }
+}
+
+let cachedScanInput = null, cachedScanPos = -1, cachedScanEnd = -1
+// Returns the offset of the closing `}}` for an expression starting
+// at `offset`, or -1.
+function interpolationEnd(input, offset) {
+  let pos = input.pos + offset
+  if (cachedScanInput != input || cachedScanPos != pos) {
+    cachedScanInput = input; cachedScanPos = pos
+    cachedScanEnd = scanInterpolation(input, offset)
+    if (cachedScanEnd >= 0) cachedScanEnd -= offset
+  }
+  return cachedScanEnd < 0 ? -1 : cachedScanEnd + offset
+}
+
+// Tokenizes text content and, in the vue dialect, `{{ }}`
+// interpolations. An opening `{{` without a matching `}}` is treated
+// as text.
+export const textTokens = new ExternalTokenizer((input, stack) => {
+  let vue = stack.dialectEnabled(Dialect_vue)
+  if (vue) {
+    if (stack.canShift(InterpolationContent)) {
+      let end = interpolationEnd(input, 0)
+      if (end > 0) return input.acceptToken(InterpolationContent, end)
+    }
+    if (input.next == braceR && input.peek(1) == braceR && stack.canShift(InterpolationEnd))
+      return input.acceptToken(InterpolationEnd, 2)
+    if (input.next == braceL && input.peek(1) == braceL && stack.canShift(InterpolationStart) &&
+        interpolationEnd(input, 2) >= 0)
+      return input.acceptToken(InterpolationStart, 2)
+  }
+  if (!stack.canShift(Text)) return
+  for (let i = 0;; i++) {
+    let next = input.next
+    if (next < 0 || next == lessThan || next == ampersand ||
+        vue && i > 0 && next == braceL && input.peek(1) == braceL && interpolationEnd(input, 2) >= 0) {
+      if (i) input.acceptToken(Text)
+      return
+    }
+    input.advance()
+  }
+})

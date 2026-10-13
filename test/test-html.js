@@ -14,22 +14,14 @@ let mixed = parser.configure({
       return !attrs.type || /^(?:text|application)\/(?:x-)?(?:java|ecma)script$|^module$|^$/i.test(attrs.type)
     },
     parser: jsParser
-  }])
-})
-
-let codemovie = parser.configure({
-  dialect: "vue"
+  }], [], jsParser.configure({top: "SingleExpression"}))
 })
 
 for (let file of fs.readdirSync(caseDir)) {
   if (!/\.txt$/.test(file)) continue
   let name = /^[^\.]*/.exec(file)[0]
   describe(name, () => {
-    let p = name == "mixed"
-      ? mixed
-      : name == "codemovie"
-        ? codemovie
-        : parser
+    let p = name == "mixed" ? mixed : parser
     for (let {name, run} of fileTests(fs.readFileSync(path.join(caseDir, file), "utf8"), file))
       it(name, () => run(p))
   })

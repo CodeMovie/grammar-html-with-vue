@@ -1,50 +1,120 @@
-# Parses Vue text interpolation
+# Vue text interpolation with {"dialect": "vue"}
 
-<span>Message: {{ msg }}</span>
+<span>Message: {{ msg }}!</span>
+
+==>
+
+Document(Element(OpenTag(StartTag,TagName,EndTag),
+  Text,
+  Interpolation(InterpolationStart,InterpolationContent,InterpolationEnd),
+  Text,
+CloseTag(StartCloseTag,TagName,EndTag)))
+
+# Interpolation at top level {"dialect": "vue"}
+
+{{ a }}{{ b }}
 
 ==>
 
 Document(
-  Element(
-    OpenTag(StartTag, TagName, EndTag),
-    Text,
-    Interpolation(InterpolationStart,InterpolationContent,InterpolationEnd),
-    CloseTag(StartCloseTag, TagName, EndTag)))
+  Interpolation(InterpolationStart,InterpolationContent,InterpolationEnd),
+  Interpolation(InterpolationStart,InterpolationContent,InterpolationEnd))
 
-# Parses multiple Vue text interpolations
+# Empty interpolation {"dialect": "vue"}
 
-<div>{{ a }} + {{ b }}</div>
+{{}}
 
 ==>
 
-Document(
-  Element(
-    OpenTag(StartTag, TagName, EndTag),
-    Interpolation(InterpolationStart,InterpolationContent,InterpolationEnd)
-    Text,
-    Interpolation(InterpolationStart,InterpolationContent,InterpolationEnd)
-    CloseTag(StartCloseTag, TagName, EndTag)))
+Document(Interpolation(InterpolationStart,InterpolationEnd))
 
-# Parses Vue text interpolation containing braces and operators
+# Interpolation next to entities {"dialect": "vue"}
 
-<span>{{ a && {nested: true} }}</span>
+&amp;{{ x }}&lt;
 
 ==>
 
-Document(
-  Element(
-    OpenTag(StartTag, TagName, EndTag),
-    Interpolation(InterpolationStart,InterpolationContent,InterpolationEnd)
-    CloseTag(StartCloseTag, TagName, EndTag)))
+Document(EntityReference,Interpolation(InterpolationStart,InterpolationContent,InterpolationEnd),EntityReference)
 
-# Treats lone curly braces as text
+# Angle brackets and ampersands in interpolations {"dialect": "vue"}
 
-<p>one { two } three</p>
+<p>{{ a < b && c > d }}</p>
 
 ==>
 
-Document(
-  Element(
-    OpenTag(StartTag, TagName, EndTag),
-    Text,
-    CloseTag(StartCloseTag, TagName, EndTag)))
+Document(Element(OpenTag(StartTag,TagName,EndTag),
+  Interpolation(InterpolationStart,InterpolationContent,InterpolationEnd),
+CloseTag(StartCloseTag,TagName,EndTag)))
+
+# Object literals in interpolations {"dialect": "vue"}
+
+{{ {a: {b: 1}} }}x
+
+==>
+
+Document(Interpolation(InterpolationStart,InterpolationContent,InterpolationEnd),Text)
+
+# Closing braces in strings and templates {"dialect": "vue"}
+
+{{ "}}" + '}}' + `}}${ {a: "}}"} }` }}x
+
+==>
+
+Document(Interpolation(InterpolationStart,InterpolationContent,InterpolationEnd),Text)
+
+# Closing braces in regular expressions {"dialect": "vue"}
+
+{{ /}}/.test(a / b) }}x
+
+==>
+
+Document(Interpolation(InterpolationStart,InterpolationContent,InterpolationEnd),Text)
+
+# Closing braces in block comments {"dialect": "vue"}
+
+{{ a /* }} */ }}x
+
+==>
+
+Document(Interpolation(InterpolationStart,InterpolationContent,InterpolationEnd),Text)
+
+# Unterminated interpolation is text {"dialect": "vue"}
+
+<p>a {{ b</p>
+
+==>
+
+Document(Element(OpenTag(StartTag,TagName,EndTag),Text,CloseTag(StartCloseTag,TagName,EndTag)))
+
+# Single braces are text {"dialect": "vue"}
+
+a { b } c }}
+
+==>
+
+Document(Text)
+
+# No interpolation in attributes {"dialect": "vue"}
+
+<p title="{{ a }}"></p>
+
+==>
+
+Document(Element(OpenTag(StartTag,TagName,Attribute(AttributeName,Is,AttributeValue),EndTag),
+CloseTag(StartCloseTag,TagName,EndTag)))
+
+# No interpolation in script {"dialect": "vue"}
+
+<script>{{ a }}</script>
+
+==>
+
+Document(Element(OpenTag(StartTag,TagName,EndTag),ScriptText,CloseTag(StartCloseTag,TagName,EndTag)))
+
+# No interpolation without the dialect
+
+<p>{{ a }}</p>
+
+==>
+
+Document(Element(OpenTag(StartTag,TagName,EndTag),Text,CloseTag(StartCloseTag,TagName,EndTag)))

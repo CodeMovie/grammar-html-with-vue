@@ -1,6 +1,6 @@
 import {ScriptText, StyleText, TextareaText,
         Element, TagName, Attribute, AttributeName, OpenTag, CloseTag,
-        AttributeValue, UnquotedAttributeValue} from "./parser.terms.js"
+        AttributeValue, UnquotedAttributeValue, InterpolationContent} from "./parser.terms.js"
 import {parseMixed} from "@lezer/common"
 
 function getAttrs(openTag, input) {
@@ -37,8 +37,9 @@ function maybeNest(node, input, tags) {
 //   tagName?: string,
 //   parser: Parser
 // }[]
+// interpolation?: Parser
  
-export function configureNesting(tags = [], attributes = []) {
+export function configureNesting(tags = [], attributes = [], interpolation = null) {
   let script = [], style = [], textarea = [], other = []
   for (let tag of tags) {
     let array = tag.tag == "script" ? script : tag.tag == "style" ? style : tag.tag == "textarea" ? textarea : other
@@ -52,6 +53,7 @@ export function configureNesting(tags = [], attributes = []) {
     if (id == ScriptText) return maybeNest(node, input, script)
     if (id == StyleText) return maybeNest(node, input, style)
     if (id == TextareaText) return maybeNest(node, input, textarea)
+    if (id == InterpolationContent && interpolation) return {parser: interpolation, bracketed: true}
 
     if (id == Element && other.length) {
       let n = node.node, open = n.firstChild, tagName = open && findTagName(open, input), attrs

@@ -67,3 +67,18 @@ CloseTag(StartCloseTag,TagName,EndTag)))
 Document(Element(OpenTag(StartTag,TagName,EndTag),
   Script(...),
 CloseTag(StartCloseTag,TagName,EndTag)))
+
+# Parses interpolations as JS expressions {"dialect": "vue"}
+
+<p>{{ {a: 1}.a + f(`x${y}`) }}</p>
+
+==>
+
+Document(Element(OpenTag(StartTag,TagName,EndTag),
+  Interpolation(InterpolationStart,
+    SingleExpression(BinaryExpression(
+      MemberExpression(ObjectExpression("{",Property(PropertyDefinition,":",Number),"}"),".",PropertyName),
+      ArithOp,
+      CallExpression(VariableName,ArgList("(",TemplateString(Interpolation(InterpolationStart,VariableName,InterpolationEnd)),")")))),
+  InterpolationEnd),
+CloseTag(StartCloseTag,TagName,EndTag)))
