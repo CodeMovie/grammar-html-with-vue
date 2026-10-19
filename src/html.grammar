@@ -1,6 +1,6 @@
 @top Document { (entity | DoctypeDecl)+ }
 
-@dialects { noMatch, selfClosing, vue }
+@dialects { noMatch, selfClosing, vue, specialComponent }
 
 entity[@isGroup=Entity] {
   Text |
@@ -9,6 +9,7 @@ entity[@isGroup=Entity] {
   CharacterReference |
   InvalidEntity |
   Element |
+  Component |
   Comment |
   ProcessingInst |
   IncompleteTag |
@@ -23,6 +24,15 @@ Element {
   OpenTextareaTag TextareaText (CloseTextareaTag | missingCloseTag) |
   OpenTag entity* (CloseTag | missingCloseTag) |
   SelfClosingTag
+}
+
+Component {
+  OpenComponentTag entity* (CloseComponentTag | missingCloseTag) |
+  SelfClosingComponentTag
+}
+
+Interpolation[isolate] {
+  InterpolationStart InterpolationContent? InterpolationEnd
 }
 
 ScriptText[group="TextContent Entity"] { scriptText* }
@@ -42,15 +52,29 @@ TextareaText[group="TextContent Entity"] { textareaText* }
   }
 
   MismatchedCloseTag[isolate=ltr] {
-    MismatchedStartCloseTag TagName EndTag
+    MismatchedStartCloseTag TagName EndTag |
+    MismatchedStartEndComponent ComponentTag EndComponent
   }
 
   NoMatchCloseTag[@name=CloseTag,isolate=ltr] {
-    NoMatchStartCloseTag TagName EndTag
+    NoMatchStartCloseTag TagName EndTag |
+    NoMatchStartEndComponent ComponentTag EndComponent
   }
 
   CloseTag[openedBy=OpenTag,isolate=ltr] {
     StartCloseTag TagName EndTag
+  }
+
+  OpenComponentTag[@name=OpenTag,closedBy=CloseTag,isolate=ltr] {
+    StartComponent ComponentTag Attribute* EndComponent
+  }
+
+  SelfClosingComponentTag[@name=SelfClosingTag,isolate=ltr] {
+    StartComponent ComponentTag Attribute* SelfClosingEndTag
+  }
+
+  CloseComponentTag[@name=CloseTag,openedBy=OpenTag,isolate=ltr] {
+    StartEndComponent ComponentTag EndComponent
   }
 
   OpenScriptTag[@name=OpenTag,closedBy=CloseTag,isolate=ltr] {
@@ -89,8 +113,6 @@ AttributeValue[isolate] {
 
 Comment[isolate] { commentStart commentContent* commentEnd }
 
-Interpolation[isolate] { InterpolationStart InterpolationContent? InterpolationEnd }
-
 @context elementContext from "./tokens.js"
 
 @external tokens scriptTokens from "./tokens.js" {
@@ -110,7 +132,8 @@ Interpolation[isolate] { InterpolationStart InterpolationContent? InterpolationE
 
 @external tokens endTag from "./tokens.js" {
   EndTag[openedBy="StartTag StartCloseTag"]
-  SelfClosingEndTag[openedBy=StartTag,@dialect=selfClosing]
+  EndComponent[openedBy="StartComponent StartEndComponent"]
+  SelfClosingEndTag[openedBy="StartTag StartComponent",@dialect=selfClosing]
 }
 
 @external tokens tagStart from "./tokens.js" {
@@ -122,6 +145,10 @@ Interpolation[isolate] { InterpolationStart InterpolationContent? InterpolationE
   StartCloseTag[closedBy=EndTag],
   NoMatchStartCloseTag[@name=StartCloseTag,closedBy=EndTag]
   MismatchedStartCloseTag[@name=StartCloseTag,closedBy=EndTag],
+  StartComponent[closedBy="EndComponent SelfClosingEndTag"],
+  StartEndComponent[closedBy=EndComponent],
+  NoMatchStartEndComponent[@name=StartEndComponent,closedBy=EndComponent],
+  MismatchedStartEndComponent[@name=StartEndComponent,closedBy=EndComponent],
   missingCloseTag,
   IncompleteTag,
   IncompleteCloseTag
@@ -152,6 +179,8 @@ Interpolation[isolate] { InterpolationStart InterpolationContent? InterpolationE
   identifier { nameStart nameChar* }
 
   TagName { identifier }
+
+  ComponentTag { identifier }
 
   AttributeName { ![\u0000-\u0020\u007F-\u009F"'<>/=\uFDD0-\uFDEF\uFFFE\uFFFF]+ }
 

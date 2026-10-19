@@ -1,0 +1,134 @@
+# Parses CamelCased tags as components {"dialect": "specialComponent"}
+
+<MyComponent a=b><p>hi</p></MyComponent>
+
+==>
+
+Document(
+  Component(
+    OpenTag(StartComponent, ComponentTag, Attribute(AttributeName, Is, UnquotedAttributeValue), EndComponent),
+    Element(OpenTag(StartTag, TagName, EndTag), Text, CloseTag(StartCloseTag, TagName, EndTag)),
+    CloseTag(StartEndComponent, ComponentTag, EndComponent)))
+
+# Does not treat all-uppercase tags as components {"dialect": "specialComponent"}
+
+<DIV></DIV>
+
+==>
+
+Document(Element(OpenTag(StartTag, TagName, EndTag), CloseTag(StartCloseTag, TagName, EndTag)))
+
+# Matches component names case-sensitively {"dialect": "specialComponent"}
+
+<Foo></foo></Foo>
+
+==>
+
+Document(
+  Component(
+    OpenTag(StartComponent, ComponentTag, EndComponent),
+    MismatchedCloseTag(StartCloseTag, TagName, EndTag),
+    CloseTag(StartEndComponent, ComponentTag, EndComponent)))
+
+# Flags mismatched component close tags {"dialect": "specialComponent"}
+
+<div></Foo></div>
+
+==>
+
+Document(
+  Element(
+    OpenTag(StartTag, TagName, EndTag),
+    MismatchedCloseTag(StartEndComponent, ComponentTag, EndComponent),
+    CloseTag(StartCloseTag, TagName, EndTag)))
+
+# Doesn't give components HTML element semantics {"dialect": "specialComponent"}
+
+<p><Input><Li></Li></Input></p>
+
+==>
+
+Document(
+  Element(
+    OpenTag(StartTag, TagName, EndTag),
+    Component(
+      OpenTag(StartComponent, ComponentTag, EndComponent),
+      Component(OpenTag(StartComponent, ComponentTag, EndComponent), CloseTag(StartEndComponent, ComponentTag, EndComponent)),
+      CloseTag(StartEndComponent, ComponentTag, EndComponent)),
+    CloseTag(StartCloseTag, TagName, EndTag)))
+
+# Supports self-closing components {"dialect": "specialComponent selfClosing"}
+
+<div><MyIcon name=x /></div>
+
+==>
+
+Document(
+  Element(
+    OpenTag(StartTag, TagName, EndTag),
+    Component(SelfClosingTag(StartComponent, ComponentTag, Attribute(AttributeName, Is, UnquotedAttributeValue), SelfClosingEndTag)),
+    CloseTag(StartCloseTag, TagName, EndTag)))
+
+# Supports components in noMatch dialect {"dialect": "specialComponent noMatch"}
+
+<Foo></Bar>
+
+==>
+
+Document(Component(OpenTag(StartComponent, ComponentTag, EndComponent), CloseTag(StartEndComponent, ComponentTag, EndComponent)))
+
+# Parses kebab-cased tags as components {"dialect": "specialComponent"}
+
+<my-component a=b><p>hi</p></my-component>
+
+==>
+
+Document(
+  Component(
+    OpenTag(StartComponent, ComponentTag, Attribute(AttributeName, Is, UnquotedAttributeValue), EndComponent),
+    Element(OpenTag(StartTag, TagName, EndTag), Text, CloseTag(StartCloseTag, TagName, EndTag)),
+    CloseTag(StartEndComponent, ComponentTag, EndComponent)))
+
+# Matches kebab-cased component names case-sensitively {"dialect": "specialComponent"}
+
+<my-input></My-Input></my-input>
+
+==>
+
+Document(
+  Component(
+    OpenTag(StartComponent, ComponentTag, EndComponent),
+    MismatchedCloseTag(StartEndComponent, ComponentTag, EndComponent),
+    CloseTag(StartEndComponent, ComponentTag, EndComponent)))
+
+# Doesn't treat hyphenated SVG and MathML elements as components {"dialect": "specialComponent"}
+
+<svg><font-face></FONT-FACE></svg><math><annotation-xml></annotation-xml></math>
+
+==>
+
+Document(
+  Element(
+    OpenTag(StartTag, TagName, EndTag),
+    Element(OpenTag(StartTag, TagName, EndTag), CloseTag(StartCloseTag, TagName, EndTag)),
+    CloseTag(StartCloseTag, TagName, EndTag)),
+  Element(
+    OpenTag(StartTag, TagName, EndTag),
+    Element(OpenTag(StartTag, TagName, EndTag), CloseTag(StartCloseTag, TagName, EndTag)),
+    CloseTag(StartCloseTag, TagName, EndTag)))
+
+# Treats CamelCased tags as regular tags outside the specialComponent dialect
+
+<MyComponent></mycomponent>
+
+==>
+
+Document(Element(OpenTag(StartTag, TagName, EndTag), CloseTag(StartCloseTag, TagName, EndTag)))
+
+# Treats kebab-cased tags as regular tags outside the specialComponent dialect
+
+<my-component></MY-COMPONENT>
+
+==>
+
+Document(Element(OpenTag(StartTag, TagName, EndTag), CloseTag(StartCloseTag, TagName, EndTag)))

@@ -1,6 +1,6 @@
 import {ScriptText, StyleText, TextareaText,
-        Element, TagName, Attribute, AttributeName, OpenTag, CloseTag,
-        AttributeValue, UnquotedAttributeValue, InterpolationContent} from "./parser.terms.js"
+        Element, Component, TagName, ComponentTag, Attribute, AttributeName, OpenTag, CloseTag,
+        CloseComponentTag, AttributeValue, UnquotedAttributeValue, InterpolationContent} from "./parser.terms.js"
 import {parseMixed} from "@lezer/common"
 
 function getAttrs(openTag, input) {
@@ -14,7 +14,7 @@ function getAttrs(openTag, input) {
 }
 
 function findTagName(openTag, input) {
-  let tagNameNode = openTag.getChild(TagName)
+  let tagNameNode = openTag.getChild(TagName) || openTag.getChild(ComponentTag)
   return tagNameNode ? input.read(tagNameNode.from, tagNameNode.to) : " "
 }
 
@@ -55,12 +55,12 @@ export function configureNesting(tags = [], attributes = [], interpolation = nul
     if (id == TextareaText) return maybeNest(node, input, textarea)
     if (id == InterpolationContent && interpolation) return {parser: interpolation, bracketed: true}
 
-    if (id == Element && other.length) {
+    if ((id == Element || id == Component) && other.length) {
       let n = node.node, open = n.firstChild, tagName = open && findTagName(open, input), attrs
       if (tagName) for (let tag of other) {
         if (tag.tag == tagName && (!tag.attrs || tag.attrs(attrs || (attrs = getAttrs(open, input))))) {
           let close = n.lastChild
-          let to = close.type.id == CloseTag ? close.from : n.to
+          let to = close.type.id == CloseTag || close.type.id == CloseComponentTag ? close.from : n.to
           if (to > open.to)
             return {parser: tag.parser, overlay: [{from: open.to, to}]}
         }

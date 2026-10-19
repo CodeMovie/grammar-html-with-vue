@@ -3,10 +3,12 @@
 import {ExternalTokenizer, ContextTracker} from "@lezer/lr"
 import {StartTag, StartCloseTag, NoMatchStartCloseTag, MismatchedStartCloseTag, missingCloseTag,
         StartSelfClosingTag, IncompleteCloseTag, Element, OpenTag, IncompleteTag,
+        Component, OpenComponentTag,
         StartScriptTag, scriptText, StartCloseScriptTag,
         StartStyleTag, styleText, StartCloseStyleTag,
         StartTextareaTag, textareaText, StartCloseTextareaTag,
-        Dialect_noMatch, Dialect_selfClosing, Dialect_vue, EndTag, SelfClosingEndTag,
+        StartComponent, StartEndComponent, NoMatchStartEndComponent, MismatchedStartEndComponent,
+        Dialect_noMatch, Dialect_selfClosing, Dialect_vue, Dialect_specialComponent, EndTag, EndComponent, SelfClosingEndTag,
         Text, InterpolationStart, InterpolationContent, InterpolationEnd,
         commentContent as cmntContent} from "./parser.terms.js"
 
@@ -54,6 +56,18 @@ function isSpace(ch) {
   return ch == 9 || ch == 10 || ch == 13 || ch == 32
 }
 
+const hyphenatedBuiltIns = [
+  "annotation-xml", "color-profile", "font-face", "font-face-src",
+  "font-face-uri", "font-face-format", "font-face-name", "missing-glyph"
+]
+
+function isComponent(name, stack) {
+  if (!stack.dialectEnabled(Dialect_specialComponent)) return false
+  let first = name.charCodeAt(0)
+  return first >= 65 && first <= 90 && /[a-z]/.test(name) ||
+    name.indexOf("-", 1) > 0 && !hyphenatedBuiltIns.includes(name.toLowerCase())
+}
+
 let cachedName = null, cachedInput = null, cachedPos = 0
 function tagNameAfter(input, offset) {
   let pos = input.pos + offset
@@ -66,7 +80,11 @@ function tagNameAfter(input, offset) {
   }
   // Undefined to signal there's a <? or <!, null for just missing
   cachedInput = input; cachedPos = pos
-  return cachedName = name ? name.toLowerCase() : next == question || next == bang ? undefined : null
+  return cachedName = name ? name : next == question || next == bang ? undefined : null
+}
+
+function elementName(name, stack) {
+  return name && !isComponent(name, stack) ? name.toLowerCase() : name
 }
 
 const lessThan = 60, greaterThan = 62, slash = 47, question = 63, bang = 33, dash = 45
@@ -76,20 +94,20 @@ function ElementContext(name, parent) {
   this.parent = parent
 }
 
-const startTagTerms = [StartTag, StartSelfClosingTag, StartScriptTag, StartStyleTag, StartTextareaTag]
+const startTagTerms = [StartTag, StartSelfClosingTag, StartScriptTag, StartStyleTag, StartTextareaTag, StartComponent]
 
 export const elementContext = new ContextTracker({
   start: null,
   shift(context, term, stack, input) {
-    return startTagTerms.indexOf(term) > -1 ? new ElementContext(tagNameAfter(input, 1) || "", context) : context
+    return startTagTerms.indexOf(term) > -1 ? new ElementContext(elementName(tagNameAfter(input, 1), stack) || "", context) : context
   },
   reduce(context, term) {
-    return term == Element && context ? context.parent : context
+    return (term == Element || term == Component) && context ? context.parent : context
   },
   reuse(context, node, stack, input) {
     let type = node.type.id
-    return type == StartTag || type == OpenTag
-      ? new ElementContext(tagNameAfter(input, 1) || "", context) : context
+    return type == StartTag || type == StartComponent || type == OpenTag || type == OpenComponentTag
+      ? new ElementContext(elementName(tagNameAfter(input, 1), stack) || "", context) : context
   },
   strict: false
 })
@@ -107,13 +125,18 @@ export const tagStart = new ExternalTokenizer((input, stack) => {
   if (name === undefined) return
   if (!name) return input.acceptToken(close ? IncompleteCloseTag : IncompleteTag)
 
+  let component = isComponent(name, stack)
+  if (!component) name = name.toLowerCase()
   let parent = stack.context ? stack.context.name : null
   if (close) {
-    if (name == parent) return input.acceptToken(StartCloseTag)
+    if (name == parent) return input.acceptToken(component ? StartEndComponent : StartCloseTag)
     if (parent && implicitlyClosed[parent]) return input.acceptToken(missingCloseTag, -2)
-    if (stack.dialectEnabled(Dialect_noMatch)) return input.acceptToken(NoMatchStartCloseTag)
+    if (stack.dialectEnabled(Dialect_noMatch))
+      return input.acceptToken(component ? NoMatchStartEndComponent : NoMatchStartCloseTag)
     for (let cx = stack.context; cx; cx = cx.parent) if (cx.name == name) return
-    input.acceptToken(MismatchedStartCloseTag)
+    input.acceptToken(component ? MismatchedStartEndComponent : MismatchedStartCloseTag)
+  } else if (component) {
+    input.acceptToken(StartComponent)
   } else {
     if (name == "script") return input.acceptToken(StartScriptTag)
     if (name == "style") return input.acceptToken(StartStyleTag)
@@ -151,9 +174,9 @@ function inForeignElement(context) {
 export const endTag = new ExternalTokenizer((input, stack) => {
   if (input.next == slash && input.peek(1) == greaterThan) {
     let selfClosing = stack.dialectEnabled(Dialect_selfClosing) || inForeignElement(stack.context)
-    input.acceptToken(selfClosing ? SelfClosingEndTag : EndTag, 2)
+    input.acceptToken(selfClosing ? SelfClosingEndTag : stack.canShift(EndComponent) ? EndComponent : EndTag, 2)
   } else if (input.next == greaterThan) {
-    input.acceptToken(EndTag, 1)
+    input.acceptToken(stack.canShift(EndComponent) ? EndComponent : EndTag, 1)
   }
 })
 
@@ -182,7 +205,7 @@ function contentTokenizer(tag, textToken, endToken) {
         else
           input.acceptToken(endToken, -(matchedLen - 2))
         break
-      } else if ((input.next == 10 /* '\n' */ || input.next == 13 /* '\r' */) && i) {
+      } else if ((input.next == 10 || input.next == 13) && i) {
         input.acceptToken(textToken, 1)
         break
       } else {
@@ -219,12 +242,6 @@ const regexpKeywords = {
   void: true, await: true, yield: true, return: true, case: true, do: true, else: true
 }
 
-// Scan a JavaScript expression starting at `offset` (relative to the
-// input's position), looking for the `}}` that closes the
-// interpolation. Strings, template literals, comments, regular
-// expressions, and nested braces are skipped over, so that a `}}`
-// appearing inside of them does not end the interpolation. Returns
-// the offset of the closing braces, or -1 if there are none.
 function scanInterpolation(input, offset) {
   // Stack of open braces. `true` marks a template literal `${`.
   let braces = [], regexpAllowed = true
@@ -288,9 +305,6 @@ function scanString(input, pos, quote) {
   }
 }
 
-// Scan the rest of a template literal. When a `${` is found, a
-// marker is pushed onto the brace stack, and the position after it
-// is returned.
 function scanTemplate(input, pos, braces) {
   for (;; pos++) {
     let ch = input.peek(pos)
